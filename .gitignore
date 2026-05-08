@@ -23,5 +23,6 @@ Thumbs.db
 
 # IDE
 .claude/
+.vscode/
 DEMO_STREETRACEX.html
 SUSTENTACION_STREETRACEX.md
