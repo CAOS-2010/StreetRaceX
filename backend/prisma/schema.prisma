@@ -1,0 +1,170 @@
+// StreetRaceX - Prisma Schema
+// Architecture: Hexagonal | DB: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────
+
+enum Rango {
+  S
+  A
+  B
+  C
+  D
+}
+
+enum TipoVehiculo {
+  auto
+  moto
+  monopatin_electrico
+}
+
+enum EstadoChallenge {
+  pendiente
+  aceptado
+  rechazado
+  en_curso
+  completado
+  cancelado
+}
+
+enum TipoCarrera {
+  cuarto_milla
+  vueltas
+  derrape
+}
+
+enum EstadoUsuario {
+  activo
+  inactivo
+  suspendido
+}
+
+enum TipoNotificacion {
+  reto_recibido
+  reto_aceptado
+  reto_rechazado
+  resultado
+  rango_subido
+}
+
+enum RolUsuario {
+  piloto
+  administrador
+}
+
+// ─────────────────────────────────────────
+// User
+// ─────────────────────────────────────────
+
+model User {
+  id                  String        @id @default(uuid())
+  username            String        @unique
+  email               String        @unique
+  password_hash       String
+  foto_perfil         String?
+  zona_localidad      String?
+  zona_ciudad         String?
+  zona_estado         String?
+  zona_pais           String?
+  rango               Rango         @default(D)
+  rol                 RolUsuario    @default(piloto)
+  victorias           Int           @default(0)
+  derrotas            Int           @default(0)
+  retos_consecutivos  Int           @default(0)
+  estado              EstadoUsuario @default(activo)
+  created_at          DateTime      @default(now())
+  updated_at          DateTime      @updatedAt
+
+  // Relations
+  vehicles            Vehicle[]
+  retosEnviados       Challenge[]   @relation("retador")
+  retosRecibidos      Challenge[]   @relation("retado")
+  retosGanados        Challenge[]   @relation("ganador")
+  notifications       Notification[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────
+// Vehicle
+// ─────────────────────────────────────────
+
+model Vehicle {
+  id              String       @id @default(uuid())
+  user_id         String
+  tipo_vehiculo   TipoVehiculo
+  marca           String
+  modelo          String
+  anio            Int
+  color           String?
+  placa           String?      @unique
+  foto            String?
+  modificaciones  String?
+  activo          Boolean      @default(false)
+  created_at      DateTime     @default(now())
+
+  // Relations
+  user            User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  retosComoRetador Challenge[] @relation("vehiculoRetador")
+  retosComoRetado  Challenge[] @relation("vehiculoRetado")
+
+  @@map("vehicles")
+}
+
+// ─────────────────────────────────────────
+// Challenge
+// ─────────────────────────────────────────
+
+model Challenge {
+  id                   String          @id @default(uuid())
+  retador_id           String
+  retado_id            String
+  vehiculo_retador_id  String
+  vehiculo_retado_id   String?
+  tipo_carrera         TipoCarrera
+  estado               EstadoChallenge @default(pendiente)
+  ganador_id           String?
+  ubicacion_acordada   String?
+  fecha_acordada       DateTime?
+  notas                String?
+  created_at           DateTime        @default(now())
+  updated_at           DateTime        @updatedAt
+
+  // Relations
+  retador              User            @relation("retador", fields: [retador_id], references: [id])
+  retado               User            @relation("retado", fields: [retado_id], references: [id])
+  ganador              User?           @relation("ganador", fields: [ganador_id], references: [id])
+  vehiculoRetador      Vehicle         @relation("vehiculoRetador", fields: [vehiculo_retador_id], references: [id])
+  vehiculoRetado       Vehicle?        @relation("vehiculoRetado", fields: [vehiculo_retado_id], references: [id])
+
+  @@map("challenges")
+}
+
+// ─────────────────────────────────────────
+// Notification
+// ─────────────────────────────────────────
+
+model Notification {
+  id            String           @id @default(uuid())
+  user_id       String
+  tipo          TipoNotificacion
+  mensaje       String
+  leida         Boolean          @default(false)
+  referencia_id String?
+  created_at    DateTime         @default(now())
+
+  // Relations
+  user          User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
