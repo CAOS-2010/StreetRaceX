@@ -1,5 +1,3 @@
-// Page: Challenges — list, accept, reject, register result
-
 import { useState, useEffect, useCallback } from 'react';
 import { challengeApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -12,13 +10,22 @@ const STATE_COLORS: Record<EstadoChallenge, string> = {
   rechazado: '#f44336',
   en_curso: '#9C27B0',
   completado: '#4CAF50',
-  cancelado: '#666',
+  cancelado: '#444',
+};
+
+const STATE_LABELS: Record<EstadoChallenge, string> = {
+  pendiente: 'Pendiente',
+  aceptado: 'Aceptado',
+  rechazado: 'Rechazado',
+  en_curso: 'En Curso',
+  completado: 'Completado',
+  cancelado: 'Cancelado',
 };
 
 const TIPO_LABELS: Record<string, string> = {
-  cuarto_milla: '🏁 1/4 Mile',
-  vueltas: '🔄 Lap Race',
-  derrape: '💨 Drift',
+  cuarto_milla: '🏁 Cuarto de Milla',
+  vueltas: '🔄 Carrera por Vueltas',
+  derrape: '💨 Derrape',
 };
 
 export function ChallengesPage() {
@@ -28,25 +35,18 @@ export function ChallengesPage() {
   const [toast, setToast] = useState('');
   const [filter, setFilter] = useState<'all' | 'retador' | 'retado'>('all');
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
-  };
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const fetchChallenges = useCallback(async () => {
     try {
       const res = await challengeApi.getHistory({ rol: filter, page: 1 });
       setChallenges(res.data.data.challenges);
-    } catch {
-      showToast('Failed to load challenges');
-    } finally {
-      setLoading(false);
-    }
+    } catch { showToast('Error al cargar retos'); }
+    finally { setLoading(false); }
   }, [filter]);
 
   useEffect(() => { fetchChallenges(); }, [fetchChallenges]);
 
-  // Refresh on real-time events
   useSocketEvent('challenge:received', useCallback(() => { fetchChallenges(); }, [fetchChallenges]));
   useSocketEvent('challenge:accepted', useCallback(() => { fetchChallenges(); }, [fetchChallenges]));
   useSocketEvent('challenge:rejected', useCallback(() => { fetchChallenges(); }, [fetchChallenges]));
@@ -55,10 +55,10 @@ export function ChallengesPage() {
   const handleStatus = async (id: string, estado: string) => {
     try {
       await challengeApi.updateStatus(id, estado);
-      showToast(`Challenge ${estado} ✅`);
+      showToast(`Reto ${estado} ✅`);
       fetchChallenges();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed';
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Error';
       showToast(`Error: ${msg}`);
     }
   };
@@ -67,26 +67,32 @@ export function ChallengesPage() {
     try {
       const res = await challengeApi.registerResult(challenge.id, winnerId);
       const { winnerRankUpgraded } = res.data.data;
-      showToast(winnerRankUpgraded ? '🏆 Winner ranked up!' : 'Result registered ✅');
+      showToast(winnerRankUpgraded ? '🏆 ¡El ganador subió de rango!' : 'Resultado registrado ✅');
       fetchChallenges();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed';
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Error';
       showToast(`Error: ${msg}`);
     }
   };
 
+  const FILTERS = [
+    { key: 'all', label: 'Todos' },
+    { key: 'retador', label: 'Enviados' },
+    { key: 'retado', label: 'Recibidos' },
+  ] as const;
+
   return (
     <div style={styles.page}>
       <div style={styles.header}>
-        <h2 style={styles.title}>Challenges</h2>
+        <h2 style={styles.title}>Retos</h2>
         <div style={styles.filters}>
-          {(['all', 'retador', 'retado'] as const).map((f) => (
+          {FILTERS.map(({ key, label }) => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
-              style={{ ...styles.filterBtn, ...(filter === f ? styles.filterActive : {}) }}
+              key={key}
+              onClick={() => setFilter(key)}
+              style={{ ...styles.filterBtn, ...(filter === key ? styles.filterActive : {}) }}
             >
-              {f === 'all' ? 'All' : f === 'retador' ? 'Sent' : 'Received'}
+              {label}
             </button>
           ))}
         </div>
@@ -95,75 +101,81 @@ export function ChallengesPage() {
       {toast && <div style={styles.toast}>{toast}</div>}
 
       {loading ? (
-        <p style={styles.muted}>Loading...</p>
+        <p style={styles.muted}>Cargando...</p>
       ) : challenges.length === 0 ? (
-        <div style={styles.empty}>No challenges found. Go discover pilots!</div>
+        <div style={styles.empty}>
+          <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚔️</p>
+          <p>No hay retos. ¡Ve a descubrir pilotos!</p>
+        </div>
       ) : (
         <div style={styles.list}>
           {challenges.map((c) => {
             const isRetador = c.retador_id === user?.id;
             const isRetado = c.retado_id === user?.id;
+            const stateColor = STATE_COLORS[c.estado];
 
             return (
               <div key={c.id} style={styles.card}>
-                <div style={styles.cardTop}>
-                  <span style={{ ...styles.estado, color: STATE_COLORS[c.estado] }}>
-                    {c.estado.toUpperCase()}
-                  </span>
-                  <span style={styles.tipo}>{TIPO_LABELS[c.tipo_carrera]}</span>
-                </div>
+                {/* Top accent */}
+                <div style={{ ...styles.cardAccent, background: stateColor }} />
 
-                <p style={styles.participants}>
-                  {isRetador ? '⚔️ You challenged someone' : '🎯 You were challenged'}
-                </p>
-
-                {c.ubicacion_acordada && (
-                  <p style={styles.meta}>📍 {c.ubicacion_acordada}</p>
-                )}
-                {c.fecha_acordada && (
-                  <p style={styles.meta}>📅 {new Date(c.fecha_acordada).toLocaleDateString()}</p>
-                )}
-                {c.notas && <p style={styles.notes}>{c.notas}</p>}
-
-                {/* Actions */}
-                <div style={styles.actions}>
-                  {/* Retado can accept/reject pending challenges */}
-                  {isRetado && c.estado === 'pendiente' && (
-                    <>
-                      <button onClick={() => handleStatus(c.id, 'aceptado')} style={styles.acceptBtn}>Accept</button>
-                      <button onClick={() => handleStatus(c.id, 'rechazado')} style={styles.rejectBtn}>Reject</button>
-                    </>
-                  )}
-
-                  {/* Retador can cancel pending challenges */}
-                  {isRetador && c.estado === 'pendiente' && (
-                    <button onClick={() => challengeApi.cancel(c.id).then(() => { fetchChallenges(); showToast('Cancelled'); })} style={styles.cancelBtn}>
-                      Cancel
-                    </button>
-                  )}
-
-                  {/* Either party can register result on accepted/en_curso */}
-                  {(c.estado === 'aceptado' || c.estado === 'en_curso') && (isRetador || isRetado) && (
-                    <div style={styles.resultSection}>
-                      <p style={{ color: '#888', fontSize: '0.8rem', margin: '0 0 0.5rem 0' }}>Register winner:</p>
-                      <button onClick={() => handleResult(c, user!.id)} style={styles.winBtn}>I Won 🏆</button>
-                      <button
-                        onClick={() => {
-                          const opponent = isRetador ? c.retado_id : c.retador_id;
-                          handleResult(c, opponent);
-                        }}
-                        style={styles.loseBtn}
-                      >
-                        Opponent Won
-                      </button>
+                <div style={styles.cardBody}>
+                  <div style={styles.cardTop}>
+                    <div style={styles.cardMeta}>
+                      <span style={{ ...styles.estado, color: stateColor }}>
+                        ● {STATE_LABELS[c.estado]}
+                      </span>
+                      <span style={styles.tipo}>{TIPO_LABELS[c.tipo_carrera]}</span>
                     </div>
-                  )}
-
-                  {c.estado === 'completado' && c.ganador_id && (
-                    <p style={styles.winner}>
-                      {c.ganador_id === user?.id ? '🏆 You won!' : '💀 You lost'}
+                    <p style={styles.participants}>
+                      {isRetador ? '⚔️ Tú retaste' : '🎯 Te retaron'}
                     </p>
-                  )}
+                  </div>
+
+                  <div style={styles.details}>
+                    {c.ubicacion_acordada && <span style={styles.detail}>📍 {c.ubicacion_acordada}</span>}
+                    {c.fecha_acordada && <span style={styles.detail}>📅 {new Date(c.fecha_acordada).toLocaleDateString()}</span>}
+                  </div>
+
+                  {c.notas && <p style={styles.notes}>"{c.notas}"</p>}
+
+                  {/* Actions */}
+                  <div style={styles.actions}>
+                    {isRetado && c.estado === 'pendiente' && (
+                      <>
+                        <button onClick={() => handleStatus(c.id, 'aceptado')} style={styles.acceptBtn}>✓ Aceptar</button>
+                        <button onClick={() => handleStatus(c.id, 'rechazado')} style={styles.rejectBtn}>✗ Rechazar</button>
+                      </>
+                    )}
+
+                    {isRetador && c.estado === 'pendiente' && (
+                      <button
+                        onClick={() => challengeApi.cancel(c.id).then(() => { fetchChallenges(); showToast('Reto cancelado'); })}
+                        style={styles.cancelBtn}
+                      >
+                        Cancelar
+                      </button>
+                    )}
+
+                    {(c.estado === 'aceptado' || c.estado === 'en_curso') && (isRetador || isRetado) && (
+                      <div style={styles.resultSection}>
+                        <span style={styles.resultLabel}>Registrar resultado:</span>
+                        <button onClick={() => handleResult(c, user!.id)} style={styles.winBtn}>🏆 Yo Gané</button>
+                        <button
+                          onClick={() => handleResult(c, isRetador ? c.retado_id : c.retador_id)}
+                          style={styles.loseBtn}
+                        >
+                          Ganó el rival
+                        </button>
+                      </div>
+                    )}
+
+                    {c.estado === 'completado' && c.ganador_id && (
+                      <p style={{ ...styles.winner, color: c.ganador_id === user?.id ? '#FFD700' : '#555' }}>
+                        {c.ganador_id === user?.id ? '🏆 ¡Ganaste!' : '💀 Perdiste'}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -177,30 +189,39 @@ export function ChallengesPage() {
 const styles: Record<string, React.CSSProperties> = {
   page: { padding: '1.5rem', maxWidth: '800px', margin: '0 auto' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' },
-  title: { color: '#eee', margin: 0 },
-  filters: { display: 'flex', gap: '0.5rem' },
+  title: { fontFamily: "'Orbitron', monospace", color: '#fff', fontSize: '1.3rem', fontWeight: 700 },
+  filters: { display: 'flex', gap: '0.4rem' },
   filterBtn: {
-    background: '#1a1a1a', color: '#888', border: '1px solid #333',
-    padding: '0.35rem 0.85rem', borderRadius: '20px', cursor: 'pointer', fontSize: '0.85rem',
+    background: '#111', color: '#555', border: '1px solid #1e1e1e',
+    padding: '0.35rem 1rem', borderRadius: '20px', cursor: 'pointer',
+    fontSize: '0.8rem', fontWeight: 600, fontFamily: "'Rajdhani', sans-serif",
   },
   filterActive: { background: '#FF4500', color: '#fff', borderColor: '#FF4500' },
-  toast: { background: '#1a3a1a', border: '1px solid #4CAF50', color: '#81c784', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem' },
-  muted: { color: '#666' },
-  empty: { textAlign: 'center', color: '#888', padding: '3rem', border: '1px dashed #333', borderRadius: '8px' },
-  list: { display: 'flex', flexDirection: 'column', gap: '1rem' },
-  card: { background: '#1a1a1a', border: '1px solid #333', borderRadius: '10px', padding: '1.25rem' },
-  cardTop: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' },
-  estado: { fontWeight: 'bold', fontSize: '0.8rem' },
-  tipo: { color: '#888', fontSize: '0.9rem' },
-  participants: { color: '#eee', margin: '0 0 0.5rem 0', fontSize: '0.95rem' },
-  meta: { color: '#888', fontSize: '0.8rem', margin: '0.15rem 0' },
-  notes: { color: '#aaa', fontSize: '0.85rem', fontStyle: 'italic', margin: '0.5rem 0' },
-  actions: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem', alignItems: 'center' },
-  acceptBtn: { background: '#4CAF50', color: '#fff', border: 'none', padding: '0.4rem 0.85rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' },
-  rejectBtn: { background: '#f44336', color: '#fff', border: 'none', padding: '0.4rem 0.85rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' },
-  cancelBtn: { background: 'transparent', color: '#888', border: '1px solid #444', padding: '0.4rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' },
+  toast: {
+    background: 'rgba(76,175,80,0.08)', border: '1px solid rgba(76,175,80,0.3)',
+    color: '#81c784', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem',
+  },
+  muted: { color: '#555' },
+  empty: { textAlign: 'center', color: '#555', padding: '4rem 2rem', border: '1px dashed #1e1e1e', borderRadius: '10px' },
+  list: { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
+  card: { background: '#111', border: '1px solid #1e1e1e', borderRadius: '10px', overflow: 'hidden' },
+  cardAccent: { height: '3px', width: '100%' },
+  cardBody: { padding: '1.1rem' },
+  cardTop: { marginBottom: '0.6rem' },
+  cardMeta: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' },
+  estado: { fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.5px' },
+  tipo: { color: '#777', fontSize: '0.85rem' },
+  participants: { color: '#bbb', fontSize: '0.9rem', fontWeight: 600 },
+  details: { display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.5rem' },
+  detail: { color: '#555', fontSize: '0.78rem' },
+  notes: { color: '#444', fontSize: '0.82rem', fontStyle: 'italic', marginBottom: '0.5rem' },
+  actions: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #1a1a1a' },
+  acceptBtn: { background: '#4CAF50', color: '#fff', border: 'none', padding: '0.4rem 0.9rem', borderRadius: '5px', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', fontFamily: "'Rajdhani', sans-serif" },
+  rejectBtn: { background: 'transparent', color: '#f44336', border: '1px solid #f44336', padding: '0.4rem 0.9rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700 },
+  cancelBtn: { background: 'transparent', color: '#555', border: '1px solid #222', padding: '0.4rem 0.8rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem' },
   resultSection: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' },
-  winBtn: { background: '#FFD700', color: '#000', border: 'none', padding: '0.4rem 0.85rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' },
-  loseBtn: { background: 'transparent', color: '#888', border: '1px solid #444', padding: '0.4rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' },
-  winner: { color: '#FFD700', fontWeight: 'bold' },
+  resultLabel: { color: '#555', fontSize: '0.75rem' },
+  winBtn: { background: '#FFD700', color: '#000', border: 'none', padding: '0.4rem 0.9rem', borderRadius: '5px', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', fontFamily: "'Rajdhani', sans-serif" },
+  loseBtn: { background: 'transparent', color: '#666', border: '1px solid #222', padding: '0.4rem 0.8rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem' },
+  winner: { fontWeight: 700, fontSize: '0.95rem' },
 };
